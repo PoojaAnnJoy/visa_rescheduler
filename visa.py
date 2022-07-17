@@ -36,16 +36,18 @@ PUSH_USER = config['PUSHOVER']['PUSH_USER']
 LOCAL_USE = config['CHROMEDRIVER'].getboolean('LOCAL_USE')
 HUB_ADDRESS = config['CHROMEDRIVER']['HUB_ADDRESS']
 
-REGEX_CONTINUE = "//a[contains(text(),'Continuar')]"
+REGEX_CONTINUE = "//a[contains(text(),'Continue')]"
 
 
-# def MY_CONDITION(month, day): return int(month) == 11 and int(day) >= 5
-def MY_CONDITION(month, day): return True # No custom condition wanted for the new scheduled date
+def MY_CONDITION(year, month, day):
+    return int(year) <= 2022 \
+           and ((int(month) <= 7 and int(day) <= 28) or (int(month) == 8 and int(day) > 2))
+# def MY_CONDITION(month, day): return True # No custom condition wanted for the new scheduled date
 
 STEP_TIME = 0.5  # time between steps (interactions with forms): 0.5 seconds
-RETRY_TIME = 60*10  # wait time between retries/checks for available dates: 10 minutes
-EXCEPTION_TIME = 60*30  # wait time when an exception occurs: 30 minutes
-COOLDOWN_TIME = 60*60  # wait time when temporary banned (empty list): 60 minutes
+RETRY_TIME = 1*60  # wait time between retries/checks for available dates: 1 minutes
+EXCEPTION_TIME = 5*60  # wait time when an exception occurs: 10 minutes
+COOLDOWN_TIME = 30  # wait time when temporary banned (empty list): 1 minutes
 
 DATE_URL = f"https://ais.usvisa-info.com/{COUNTRY_CODE}/niv/schedule/{SCHEDULE_ID}/appointment/days/{FACILITY_ID}.json?appointments[expedite]=false"
 TIME_URL = f"https://ais.usvisa-info.com/{COUNTRY_CODE}/niv/schedule/{SCHEDULE_ID}/appointment/times/{FACILITY_ID}.json?date=%s&appointments[expedite]=false"
@@ -172,7 +174,7 @@ def reschedule(date):
         "authenticity_token": driver.find_element_by_name('authenticity_token').get_attribute('value'),
         "confirmed_limit_message": driver.find_element_by_name('confirmed_limit_message').get_attribute('value'),
         "use_consulate_appointment_capacity": driver.find_element_by_name('use_consulate_appointment_capacity').get_attribute('value'),
-        "appointments[consulate_appointment][facility_id]": DAYS_IN_COUNTRY, # 108
+        "appointments[consulate_appointment][facility_id]": FACILITY_ID,
         "appointments[consulate_appointment][date]": date,
         "appointments[consulate_appointment][time]": time,
     }
@@ -224,8 +226,11 @@ def get_available_date(dates):
     for d in dates:
         date = d.get('date')
         if is_earlier(date) and date != last_seen:
-            _, month, day = date.split('-')
-            if(MY_CONDITION(month, day)):
+            year, month, day = date.split('-')
+            msg = f'Validating for your conditition with values of: year={year} month={month} day={day}'
+            print(msg)
+            send_notification(msg)
+            if(MY_CONDITION(year,month, day)):
                 last_seen = date
                 return date
 
@@ -251,9 +256,10 @@ if __name__ == "__main__":
 
             dates = get_date()[:5]
             if not dates:
-              msg = "List is empty"
-              send_notification(msg)
-              EXIT = True
+              msg = "There are no available dates"
+              print(f'{msg}')
+              # send_notification(msg)
+              # EXIT = True
             print_dates(dates)
             date = get_available_date(dates)
             print()
@@ -267,8 +273,8 @@ if __name__ == "__main__":
                 break
 
             if not dates:
-              msg = "List is empty"
-              send_notification(msg)
+              # msg = "Dates are empty"
+              # send_notification(msg)
               #EXIT = True
               time.sleep(COOLDOWN_TIME)
             else:
